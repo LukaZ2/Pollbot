@@ -1,3 +1,0 @@
-FROM llama3:text
-
-PARAMETER num_predict 30
