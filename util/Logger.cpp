@@ -62,6 +62,7 @@ public:
     const spdlog::string_view_t magenta = "\033[35m";
     const spdlog::string_view_t cyan = "\033[36m";
     const spdlog::string_view_t white = "\033[37m";
+    const spdlog::string_view_t light_red = "\033[91m";
 
     /// Background colors
     const spdlog::string_view_t on_black = "\033[40m";

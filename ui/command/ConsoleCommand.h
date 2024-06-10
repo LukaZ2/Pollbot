@@ -14,6 +14,11 @@ namespace Pollbot {
         virtual void execute(Console* console, std::vector<std::string>& args) = 0;
     };
 
+    class StartCommand : public Command {
+    public:
+        void execute(Console * console, std::vector<std::string> & args) override;
+    };
+
     class TestCommand : public Command {
     public:
         void execute(Console* console, std::vector<std::string> & args) override;

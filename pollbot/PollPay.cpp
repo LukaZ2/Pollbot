@@ -14,7 +14,6 @@ std::string PollPay::url() {
 
 bool PollPay::enter(std::string username, std::string password) {
 
-    assert_(close_all(client));
     assert_(client->navigate(url()).get().success);
 
     while(true) {
@@ -42,14 +41,34 @@ double PollPay::get_balance() {
     return balance;
 }
 
+bool get_max_poll_element(MarionetteClient* client, nlohmann::json& poll_element) {
+    mResponse survey_tiles = client->execute_script("var e=document.evaluate(\"//div[@class=\'survey-tile\'] | //span[@class=\'amount__value\']/text()\",document);var r=[];while((n=e.iterateNext()))r.push(n.nodeType===Node.ELEMENT_NODE?n:n.textContent);return r;", nlohmann::json::array()).get();
+    assert_(survey_tiles.success);
+    int size = survey_tiles.body["value"].size();
+    assert_(((int)(size/2))*2 == size);
+
+    float max = 0;
+    int max_i = 0;
+    for(int i = 0; i < (size/2); i++) {
+        std::string txt = survey_tiles.body["value"][(i*2)+1];
+        float num = std::stof(txt.substr(3));
+        if(num <= max) continue;
+        max = num;
+        max_i = i*2;
+    }
+    poll_element = survey_tiles.body["value"][max_i];
+    return true;
+}
+
 bool PollPay::start_poll() {
     element_click_mouse_move(client, BUTTON_T("Don't remind me again"));
 
-    std::string poll_element;
-    assert_(wait_until_element_exists(client, std::make_shared<QueryTagName>("div", "survey-tile"), &poll_element, 10000));
+    nlohmann::json poll_element;
+    assert_(wait_until_element_exists(client, std::make_shared<QueryTagName>("div", "survey-tile"), 10000));
+    sleep_ms(800);
+    assert_(get_max_poll_element(client, poll_element));
 
-    std::string poll_button = client->find_element_from_element(poll_element, mTagName, "button").get().body["value"].front();
-    assert_(element_click_mouse_move(client, poll_button));
+    assert_(client->execute_script("arguments[0].querySelector(\"button\").click();", nlohmann::json::array({poll_element})).get().success);
     sleep_ms(800);
 
     std::string start_survey_button;
@@ -77,5 +96,5 @@ bool PollPay::login_google(std::string& username, std::string& password) {
 
 bool PollPay::on_main_page(MarionetteClient* client)
 {
-    return get_url(client).find("pollpay.app/surveys/surveys") != -1;
+    return get_url(client).find("pollpay.app/surveys/survey") != -1;
 }

@@ -1,9 +1,12 @@
 #ifndef POLLBOT_BOTINSTANCE_H
 #define POLLBOT_BOTINSTANCE_H
 #include <memory>
-#include "../marionette/MarionetteClient.h"
-#include "../marionette/Firefox.h"
-#include "../pollbot/Provider.h"
+#include <marionette/MarionetteClient.h>
+#include <marionette/Firefox.h>
+#include <pollbot/Provider.h>
+
+void load_site_blacklist();
+bool is_blacklisted_site(std::string url);
 
 class BotInstance {
     void worker();
@@ -15,7 +18,8 @@ public:
         ACTIVE,
         INACTIVE,
         STARTING,
-        STOPPING
+        STOPPING,
+        PAUSED,
     };
 
     MarionetteClient::ptr client;
@@ -30,7 +34,6 @@ public:
 
     BotInstance(std::string username, std::string password, std::string  provider_name);
     ~BotInstance();
-#define MAX_TRIES 3
     bool launch();
     void stop();
 };

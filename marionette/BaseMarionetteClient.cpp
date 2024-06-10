@@ -4,7 +4,8 @@
 #include <unistd.h>
 
 #include <memory>
-#include "../util/util.h"
+#include <util/util.h>
+#include <program_args.h>
 
 nlohmann::json MarionettePacket::as_json_array() {
     return nlohmann::json::array({0, messageId, command, body});
@@ -52,19 +53,18 @@ void BaseMarionetteClient::listen() {
                 json[2].is_null(),
                 MarionettePacket::Response::Error(),
                 json[3]
-                };
+        };
         int index = json[1];
         index--;
         if(!packet.success) {
             packet.error = {json[2]["error"], json[2]["message"], json[2]["stacktrace"]};
-#ifndef NDEBUG
-            WARN("---------- REQUEST -----------");
-            WARN(sent_packets[index]->as_json_array().dump());
-            WARN("---------- RESPONSE ----------");
-            WARN(packet.error.error);
-            WARN(packet.error.message);
-            WARN("------------------------------");
-#endif
+
+            DEBUG("---------- REQUEST -----------");
+            DEBUG(sent_packets[index]->as_json_array().dump());
+            DEBUG("---------- RESPONSE ----------");
+            DEBUG(packet.error.error);
+            DEBUG(packet.error.message);
+            DEBUG("------------------------------");
         }
         sent_packets[index]->response.set_value(packet);
         std::lock_guard l(sent_packets_mtx);

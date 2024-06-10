@@ -25,7 +25,8 @@ bool Pollbot::Console::load_accounts() {
 
 std::map<std::vector<std::string>, std::shared_ptr<Pollbot::Command>> commands = {
     {{"test"}, std::make_shared<Pollbot::TestCommand>()},
-    {{"test2"}, std::make_shared<Pollbot::Test2Command>()}
+    {{"test2"}, std::make_shared<Pollbot::Test2Command>()},
+    {{"start"}, std::make_shared<Pollbot::StartCommand>()},
 };
 
 void Pollbot::Console::handle_console_input(const std::string& line)

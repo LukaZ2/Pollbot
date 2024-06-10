@@ -35,6 +35,22 @@ fResponse MarionetteClient::switch_to_window(const std::string& handle) {
     return queue_packet("WebDriver:SwitchToWindow", {{"handle", handle}});
 }
 
+fResponse MarionetteClient::switch_to_frame(const nlohmann::json& element)
+{
+    return queue_packet("WebDriver:SwitchToFrame", {{"id", element}});
+}
+
+fResponse MarionetteClient::switch_to_frame(int index)
+{
+    return queue_packet("WebDriver:SwitchToFrame", {{"id", index}});
+}
+
+fResponse MarionetteClient::switch_to_origin_frame()
+{
+    return queue_packet("WebDriver:SwitchToFrame", {{"id", nullptr}});
+}
+
+
 fResponse MarionetteClient::take_screenshot() {
     return queue_packet("WebDriver:TakeScreenshot", {});
 }

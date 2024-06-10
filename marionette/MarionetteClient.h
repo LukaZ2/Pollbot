@@ -37,6 +37,9 @@ public:
     fResponse get_current_title();
     fResponse get_window_handles();
     fResponse switch_to_window(const std::string& handle);
+    fResponse switch_to_frame(const nlohmann::json& element);
+    fResponse switch_to_frame(int index);
+    fResponse switch_to_origin_frame();
     fResponse take_screenshot();
     fResponse dismiss_alert();
     fResponse simple_set_mouse(int x, int y);

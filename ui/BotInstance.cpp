@@ -1,12 +1,69 @@
 #include "BotInstance.h"
 #include <utility>
 #include <thread>
-#include "../util/util.h"
+#include <util/util.h>
 #include <unistd.h>
 #include <cstdio>
 #include <signal.h>
-#include "../pollbot/parser/FormParser.h"
-#include "../util/boilerplate.h"
+#include <pollbot/parser/FormParser.h>
+#include <util/boilerplate.h>
+#include <program_args.h>
+
+struct blacklisted_site {
+    enum type {
+        EQUALS,
+        CONTAINS,
+        START
+    } t;
+    std::string text;
+    bool ignore_case;
+};
+NLOHMANN_JSON_SERIALIZE_ENUM(blacklisted_site::type, {
+{blacklisted_site::EQUALS, "EQUALS"},
+{blacklisted_site::CONTAINS, "CONTAINS"},
+{blacklisted_site::START, "START"}
+});
+void from_json(const nlohmann::json& json, blacklisted_site& blacklisted_site) {
+    json["text"].get_to(blacklisted_site.text);
+    json["type"].get_to(blacklisted_site.t);
+    blacklisted_site.ignore_case = json.contains("ignore_case") ? (bool)json["ignore_case"] : false;
+}
+std::vector<blacklisted_site> blacklisted_sites;
+
+#define SITE_BLACKLIST_FILE "static_response/site_blacklist.json"
+void load_site_blacklist()
+{
+    std::ifstream file(SITE_BLACKLIST_FILE);
+    if(!file.is_open()) {
+        ERROR("Failed to open {}.", SITE_BLACKLIST_FILE);
+        return;
+    }
+    std::stringstream raw;
+    raw << file.rdbuf();
+    blacklisted_sites = nlohmann::json::parse(raw.str());
+}
+
+bool is_blacklisted_site(std::string url)
+{
+    for(auto& site : blacklisted_sites) {
+        if(site.ignore_case) std::transform(url.begin(), url.end(), url.begin(), tolower);
+        switch(site.t) {
+            case blacklisted_site::EQUALS: if(site.text == url) return true;
+                break;
+
+            case blacklisted_site::CONTAINS: if(url.find(site.text) != std::string::npos) return true;
+                break;
+
+            case blacklisted_site::START: if(url.length() >= site.text.length() && url.substr(0, site.text.length()) == site.text) return true;
+                break;
+
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
 
 BotInstance::BotInstance(std::string username, std::string password, std::string provider_name) :
 state(INACTIVE), username(std::move(username)),password(std::move(password)), provider_name(std::move(provider_name)) {}
@@ -31,13 +88,14 @@ bool BotInstance::main_cycle() {
 
         state = ACTIVE;
 
-        stop_;
+        INFO("Instance is now {}ACTIVE{}.", GREEN, RESET);
 
         while(true) {
+            assert_em(close_all(client.get()), "close_all() failed.");
             int tries = 0;
             while(!provider->enter(username, password)) {
                 tries++;
-                assert_em(tries < MAX_TRIES, "Provider->enter() failed too many times.");
+                assert_em(tries < 3, "Provider->enter() failed too many times.");
             }
             sleep_ms(1000);
             if(!provider->start_poll()) {
@@ -45,30 +103,57 @@ bool BotInstance::main_cycle() {
                 continue;
             }
 
-            Parser::FormCache question_cache;
-
-            sleep_ms(2000);
-
-            if(!wait_until_page_stable(client.get(), 3)) {
-                ERROR("Page not stable.");
-                break;
+            tablist tabs = get_tabs(client.get());
+            {
+                tablist newtabs;
+                tablist tmp_tabs;
+                tries = 0;
+                while(!element_exists(client.get(), CSS_SEL("form")) && (newtabs = get_new_tabs((tmp_tabs = get_tabs(client.get())), tabs)).empty()) {
+                    sleep_ms(1000);
+                    tries++;
+                    assert_em(tries < 18, "Survey start timed out.");
+                    continue;
+                }
+                tabs = tmp_tabs;
+                if(!newtabs.empty() && !client->switch_to_window(newtabs[0]).get().success) ERROR("Failed to switch to window {}.", newtabs[0]);
+                sleep_ms(2000);
             }
+
+            Parser::FormCache question_cache;
 
             while(true) {
 
+                DEBUG("Parsing page...");
+
                 Parser::FormParser* parser = Parser::get_parser(get_url(client.get()));
 
-                nlohmann::json tree;
-                if(!parser->get_form_tree(client.get(), tree)) {
-                    ERROR("get_form_tree() failed.");
-                    break;
+                tries = 0;
+                nlohmann::json tree = nullptr;
+                nlohmann::json tmp_tree;
+                tablist tmp_tabs;
+                while(true) {
+                    tablist newtabs;
+                    if(!(newtabs = get_new_tabs((tmp_tabs = get_tabs(client.get())), tabs)).empty()) {
+                        assert_em(client->switch_to_window(newtabs[0]).get().success, "Failed to switch to new window.");
+                        tabs = tmp_tabs;
+                        sleep_ms(100);
+                    }
+
+                    if(provider->on_main_page(client.get())) goto endloop;
+                    if(std::string url = get_url(client.get()); is_blacklisted_site(url)) {
+                        INFO("Exiting blacklisted page {}{}{}.", YELLOW, url, RESET);
+                        goto endloop;
+                    }
+                    assert_em(parser->get_form_tree(client.get(), tmp_tree), "get_form_tree() failed.");
+                    if(tree == tmp_tree) break;
+                    sleep_ms(4000);
+                    if(!parser->has_interactables(tmp_tree)) continue;
+                    tree = tmp_tree;
                 }
 
                 for(int i = 0; i < tree.size(); i++) {
                     DEBUG(tree[i].dump());
                 }
-
-                tablist tabs = get_tabs(client.get());
 
                 if(!parser->handle_form_tree(client.get(), tree, question_cache)) {
                     ERROR("handle_form_tree() failed.");
@@ -76,25 +161,12 @@ bool BotInstance::main_cycle() {
                 }
 
                 sleep_ms(2000);
-
-                if(!wait_until_page_stable(client.get(), 3)) {
-                    ERROR("Page not stable.");
-                    break;
-                }
-
-                tablist newtabs = get_new_tabs(client.get(), tabs);
-                if(newtabs.size() > 0) client->switch_to_window(newtabs[0]);
-                sleep_ms(200);
-
-                if(provider->on_main_page(client.get())) break;
             }
-            DEBUG("Done");
-            client->join();
+            endloop: continue;
         }
 
     } catch(std::exception& e) {
-        INFO(e.what());
-        INFO("Exception caught");
+        WARN("Instance exited: {}", e.what());
     }
     return true;
 }
@@ -105,10 +177,16 @@ void BotInstance::worker() {
     firefoxInstance->start_own_pg();
 
     main_cycle();
+    if(debug_mode) {
+        DEBUG("Instance is now {}PAUSED{}.", YELLOW, RESET);
+        stop_;
+    }
+    INFO("Stopping account instance {}...", username);
     stop();
     client->join();
     client = nullptr;
     state = INACTIVE;
+    INFO("Instance is now {}INACTIVE{}.", RED, RESET);
 }
 
 bool BotInstance::launch() {
@@ -122,6 +200,7 @@ bool BotInstance::launch() {
     assert_(provider != nullptr);
 
     state = STARTING;
+    INFO("Starting account instance {} on provider {}...", username, provider_name);
     task = std::async(std::launch::async, &BotInstance::worker, this);
     return true;
 }

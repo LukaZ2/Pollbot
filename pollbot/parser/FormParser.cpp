@@ -35,6 +35,16 @@ bool Parser::FormParser::get_form_tree(MarionetteClient* client, nlohmann::json&
     return true;
 }
 
+bool Parser::FormParser::has_interactables(const nlohmann::json& tree)
+{
+    for(int i = 0; i < tree.size(); i++) {
+        if(tree[i]["type"] == "txt") continue;
+        return true;
+    }
+    return false;
+}
+
+
 bool find_title_js(MarionetteClient* client, const std::string& node, std::string& out)
 {
     mResponse rect = client->get_element_rect(node).get();
@@ -77,8 +87,9 @@ int count_tree_contains(nlohmann::json& tree, const std::string& key) {
     return c;
 }
 
-bool get_prev_text_all(nlohmann::json& tree, int i, std::string& out) {
-    if(i < 2) return false;
+bool get_prev_text_all(nlohmann::json& tree, int i, std::string& out, bool include_first = true) {
+    if(include_first) out = tree[i]["text"];
+    if(i == 0) return !out.empty();
 
     int ly = tree[i].contains("rects") ? (int)tree[i]["rects"]["y"] : 0;
 
@@ -109,16 +120,29 @@ bool get_text(nlohmann::json& tree, int i, std::string& out) {
     return false;
 }
 
-std::vector<std::string> reject_text = {
-    "reject",
-    "ablehnen",
-    "nein",
-    "no",
-    "datenschutzbedingungen",
-    "datenschutzrichtlinien",
-    "datenschutzrichtlinie",
-    "back",
+struct reject_text {
+    std::string text;
+    bool require_equals;
 };
+std::vector<reject_text> reject_text = {
+    {"nein", true},
+    {"no", true},
+    {"datenschutzbedingungen", false},
+    {"datenschutzrichtlinien", false},
+    {"datenschutzrichtlinie", false},
+    {"datenschutzerklärung", false},
+    {"nutzungsbedingungen", false},
+    {"back", false},
+    {"zurück", false},
+    {"reject", false},
+    {"ablehnen", false},
+};
+
+void swap_frame(MarionetteClient* client, nlohmann::json& cframe, const nlohmann::json& frame) {
+    if(cframe == frame) return;
+    cframe = frame;
+    client->switch_to_frame(frame);
+}
 
 #define NODE_ERR(t) ERROR("{} Node: {}, Tree: {}", t, node.dump(), tree.dump())
 bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::json& tree, FormCache& question_cache)
@@ -126,12 +150,14 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
     std::vector<nlohmann::json> new_cache;
     int l_clickable = -1;
     bool save_button = true;
+    nlohmann::json cframe = nullptr;
 
     for(int i = 0; i < tree.size(); i++) {
         auto& node = tree[i];
         auto& type = node["type"];
         if(type == "txt") continue;
         std::string node_id = node["node"].front();
+        nlohmann::json frame = node.contains("frame") ? node["frame"] : nullptr;
 
         bool skip = vector_contains(question_cache.tree_cache, node["node"]);
         if(skip) new_cache.push_back(node["node"]);
@@ -149,14 +175,12 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             StaticResponse::get_text_response(text, response, question_cache.context);
 
-            if(!element_click_mouse_move(client, node_id)) {
-                NODE_ERR("Failed to click node.");
-                continue;
-            }
-
-            if(!element_send_keys(client, node_id, response)) {
-                NODE_ERR("Failed to send keys.");
-                continue;
+            swap_frame(client, cframe, frame);
+            if(!client->execute_script(
+                "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));",
+                    nlohmann::json::array({node["node"], response})).get().success) {
+                 NODE_ERR("Failed to set value of text input");
+                 continue;
             }
 
             new_cache.push_back(node["node"]);
@@ -180,6 +204,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             StaticResponse::get_number_response(text, response, min, max, step, question_cache.context);
 
+            swap_frame(client, cframe, frame);
             if(!client->execute_script(
                 "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));",
                     nlohmann::json::array({node["node"], response})).get().success) {
@@ -214,6 +239,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             StaticResponse::get_multiple_choice_response(text, options, response, question_cache.context);
 
+            swap_frame(client, cframe, frame);
             if(!client->execute_script(
                 "arguments[0].selectedIndex=arguments[1];arguments[0].dispatchEvent(new Event('change'));",
                                        nlohmann::json::array({node["node"], response[0]})).get().success) {
@@ -229,7 +255,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
             std::vector<int> response;
             std::string text;
 
-            if(!get_prev_text_all(tree, i, text) && !find_title_js(client, node["hs"].front(), text)) {
+            if(!get_prev_text_all(tree, i, text, false) && !find_title_js(client, node["hs"].front(), text)) {
                 ERROR("Failed find title. Node: {}, Tree: {}", node_id, tree.dump());
                 continue;
             }
@@ -257,8 +283,10 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
                 StaticResponse::get_multiple_choice_response(text, options_str, response, question_cache.context);
 
+                swap_frame(client, cframe, frame);
                 int clicked = 0;
                 for(auto& opt : response) {
+                    if(opt == -1) continue;
                     set_mouse_random(client);
                     if(js_click_element(client, options_node[opt])) {
                         clicked++;
@@ -274,26 +302,43 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             continue;
         }
+
+        if(type == "btn" && node["text"] == "Play") {
+            if(skip) continue;
+            if(element_click_mouse_move(client, node_id) || js_click_element(client, node["node"])) {
+                new_cache.push_back(tree[l_clickable]["node"]);
+            }
+        }
+
         // if(type == "submit") {
         //     if(skip) continue;
         //     l_clickable = i;
         //     continue;
         // }
-        if(skip) continue;
         if(!save_button) continue;
         std::string btn_text = node["text"].is_null() ? "" : node["text"];
         std::transform(btn_text.begin(), btn_text.end(), btn_text.begin(), tolower);
-        if(vector_contains(reject_text, btn_text)) continue;
+        bool rejected = false;
+        for(auto& t : reject_text) {
+            if(t.require_equals ? t.text != btn_text : (btn_text.find(t.text) == std::string::npos)) continue;
+            rejected = true;
+            break;
+        }
+        if(rejected) continue;
+
         l_clickable = i;
-        save_button = false;
+        save_button = skip;
         continue;
     }
 
     sleep_ms(400);
 
+    if(l_clickable != -1) swap_frame(client, cframe, tree[l_clickable].contains("frame") ? tree[l_clickable]["frame"] : nullptr);
     if(l_clickable != -1 && js_click_element(client, tree[l_clickable]["node"])) {
         new_cache.push_back(tree[l_clickable]["node"]);
     }
+
+    swap_frame(client, cframe, nullptr);
 
     question_cache.tree_cache = new_cache;
     return true;

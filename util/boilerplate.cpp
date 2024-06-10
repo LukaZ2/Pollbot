@@ -50,9 +50,9 @@ tablist get_tabs(MarionetteClient* client) {
     return result;
 }
 
-tablist get_new_tabs(MarionetteClient* client, const tablist& old) {
-    tablist current = get_tabs(client);
-    if(current.empty()) return current;
+tablist get_new_tabs(const tablist& current, const tablist& old)
+{
+    if(current.empty()) return {};
     tablist result;
     for (int i = 0; i < current.size(); ++i) {
         bool found = false;
@@ -62,6 +62,10 @@ tablist get_new_tabs(MarionetteClient* client, const tablist& old) {
         if(!found) result.push_back(current[i]);
     }
     return result;
+}
+
+tablist get_new_tabs(MarionetteClient* client, const tablist& old) {
+    return get_new_tabs(get_tabs(client), old);
 }
 
 std::string get_element_from_array_using_text(MarionetteClient* client, nlohmann::json array, std::string query) {
@@ -155,7 +159,7 @@ bool wait_until_element_exists(MarionetteClient* client, const std::shared_ptr< 
 }
 
 bool wait_until_element_exists(MarionetteClient *client, const std::shared_ptr<ElementQuery>& query, std::string* out, long timeout) {
-    return wait_until(element_exists, timeout, client, std::move(query), out);
+    return wait_until(element_exists, timeout, client, query, out);
 }
 
 bool url_equals(long client, std::string url) {

@@ -19,6 +19,7 @@ namespace Parser {
         virtual ~FormParser() = default;
 
         bool get_form_tree(MarionetteClient* client, nlohmann::json& tree);
+        bool has_interactables(const nlohmann::json& tree);
 
         virtual bool handle_form_tree(MarionetteClient* client, nlohmann::json& tree, FormCache& question_cache);
     };

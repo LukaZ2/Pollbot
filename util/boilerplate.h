@@ -1,8 +1,8 @@
 #ifndef POLLBOT_BOILERPLATE_H
 #define POLLBOT_BOILERPLATE_H
 #include <string>
-#include "../marionette/MarionetteClient.h"
 #include "json.hpp"
+#include <marionette/MarionetteClient.h>
 
 class ElementQuery {
 public:
@@ -48,6 +48,7 @@ public:
 
 typedef std::vector<std::string> tablist;
 tablist get_tabs(MarionetteClient* client);
+tablist get_new_tabs(const tablist& current, const tablist& old);
 tablist get_new_tabs(MarionetteClient* client, const tablist& old);
 
 std::string get_element_from_array_using_text(MarionetteClient* client, nlohmann::json array, std::string query);
@@ -57,7 +58,7 @@ bool element_click_mouse_move(MarionetteClient* client, std::string id);
 bool element_click_mouse_move(MarionetteClient* client, const std::shared_ptr<ElementQuery>& query);
 bool element_send_keys(MarionetteClient* client, const std::shared_ptr<ElementQuery>& query, std::string keys, long wait = -1);
 bool element_send_keys(MarionetteClient* client, std::string id, std::string keys, long wait = -1);
-bool element_exists(MarionetteClient *client, const std::shared_ptr<ElementQuery>& query, std::string* out);
+bool element_exists(MarionetteClient *client, std::shared_ptr<ElementQuery> query, std::string* out = nullptr);
 bool wait_until_element_exists(MarionetteClient *client, const std::shared_ptr<ElementQuery>& query, long timeout);
 bool wait_until_element_exists(MarionetteClient *client, const std::shared_ptr<ElementQuery>& query, std::string* out, long timeout);
 bool wait_until_url_equals(MarionetteClient* client, std::string url, long timeout);

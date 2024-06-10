@@ -6,8 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 #find_package(Curses 6.31232 REQUIRED)
 find_package(CURL REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(Boost 1.7 REQUIRED COMPONENTS program_options)
 
 add_executable(Pollbot main.cpp
+        program_args.h
         marionette/Firefox.cpp
         marionette/Firefox.h
         util/util.cpp
@@ -47,5 +49,6 @@ include_directories(${CURL_INCLUDE_DIR})
 target_link_libraries(Pollbot CURL::libcurl)
 target_link_libraries(Pollbot spdlog::spdlog)
 target_link_libraries(Pollbot readline)
+target_link_libraries(Pollbot Boost::program_options)
 
 #target_link_libraries(Pollbot ${CURSES_LIBRARIES})

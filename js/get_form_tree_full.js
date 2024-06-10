@@ -1,3 +1,44 @@
+function node_rendered(elem) {
+    if (!(elem instanceof Element)) return true;
+    const style = getComputedStyle(elem);
+    if (style.display === 'none') return false;
+    if (style.visibility !== 'visible') return false;
+    if (style.opacity < 0.1) return false;
+    if (elem.offsetWidth + elem.offsetHeight + elem.getBoundingClientRect().height +
+        elem.getBoundingClientRect().width === 0) {
+        return false;
+    }
+    const elemCenter   = {
+        x: elem.getBoundingClientRect().left + elem.offsetWidth / 2,
+        y: elem.getBoundingClientRect().top + elem.offsetHeight / 2
+    };
+    if (elemCenter.x < 0) return false;
+    if (elemCenter.x > (document.documentElement.clientWidth || window.innerWidth)) return false;
+    if (elemCenter.y < 0) return false;
+    if (elemCenter.y > (document.documentElement.clientHeight || window.innerHeight)) return false;
+    let pointContainer = document.elementFromPoint(elemCenter.x, elemCenter.y);
+    do {
+        if (pointContainer === elem) return true;
+    } while (pointContainer = pointContainer.parentNode);
+    return false;
+}
+function node_visible(el) {
+    if(el.nodeType !== Node.ELEMENT_NODE) return el.parentNode !== null && el.parentNode !== undefined ? node_visible(el.parentNode) : true;
+    if(!el.checkVisibility()) return false;
+    var style = window.getComputedStyle(el);
+    //if(!node_rendered(el)) return false;
+    return style === null || style === undefined || (style.visibility !== "hidden");
+}
+function get_first_non_empty(node, for_id) {
+    for(var i = 0; i < node.childNodes.length; i++) {
+        let tmp = node.childNodes[i];
+        if(tmp.nodeType !== Node.ELEMENT_NODE) continue;
+        if(!node_visible(tmp)) continue;
+        if(for_id === undefined || for_id === null) return tmp;
+        if(for_id === (tmp.hasAttribute("id") ? tmp.getAttribute("id") : null)) return tmp;
+    }
+    return null;
+}
 function nth_parent(node, n) {
     var tmp = node;
     for(var i = 0; i < n; i++) {
@@ -8,13 +49,13 @@ function nth_parent(node, n) {
 }
 function get_label(node) {
     if(!node.hasAttribute("id")) {
-        if(node.parentNode.tagName === "LABEL" && !node.previousSibling) return node.parentNode;
+        if(node.parentNode.tagName === "LABEL" && get_first_non_empty(node.parentNode) === node) return node.parentNode;
         return null;
     }
     var labels = document.querySelectorAll("label[for=\'" + node.getAttribute("id") + "\']");
     if(labels.length === 0) return null;
     for(var i = 0; i < labels.length; i++) {
-        if(!document.node_visible(labels[i]) || labels[i].textContent.replace(/\s{2,}/gm, ' ').trim() === "") continue;
+        if(!node_visible(labels[i]) || labels[i].textContent.replace(/\s{2,}/gm, ' ').trim() === "") continue;
         return labels[i];
     }
     return null;
@@ -28,29 +69,37 @@ function get_text_content(node) {
     }
     return result;
 }
-var retry = false;
-document.normalize();
-while(true) {
-    var root;
 
-    if(document.forms.length === 0 || retry) {
-        root = document.querySelector("body");
+var list = [];
+let args = arguments;
+
+function init_list(root, doc, frame) {
+
+    if(root === null) {
+        if(window.location.href.startsWith("https://web.pollpay.app")) {
+            if(document.forms.length === 0) return;
+            root = document.forms[0];
+        }
+        else {
+            root = document.documentElement;
+        }
     }
-    else {
-        root = document.forms[0];
-    }
+
     var pos = 0;
-    var list = [];
-    let args = arguments;
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL, {
+    var walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL, {
         acceptNode(node) {
+            if(node === null) return NodeFilter.FILTER_ACCEPT;
+            if(node.tagName === "IFRAME" || node.tagName === "FRAME") {
+                if(node.contentDocument !== null) init_list(node.contentDocument.documentElement, node.contentDocument, node);
+                return NodeFilter.FILTER_REJECT;
+            }
             //if(node.nodeType === Node.ELEMENT_NODE && node.tagName === "LABEL" && node.hasAttribute("for") && document.querySelector("#" + node.getAttribute("for")) !== null) return NodeFilter.FILTER_REJECT;
             if(node.tagName === "OPTION") return NodeFilter.FILTER_REJECT;
             if(node.tagName === "SCRIPT") return NodeFilter.FILTER_REJECT;
-            if(!document.node_visible(node)) {
+            if(!node_visible(node)) {
                 if(node.nodeType !== Node.ELEMENT_NODE) return NodeFilter.FILTER_REJECT;
                 var label = get_label(node);
-                if(label === null || !document.node_visible(label)) return NodeFilter.FILTER_REJECT;
+                if(label === null || !node_visible(label)) return NodeFilter.FILTER_REJECT;
             }
 
             pos++;
@@ -91,7 +140,6 @@ while(true) {
             }
 
             else if(tag === "INPUT") {
-                skip = false;
                 let type = node.getAttribute("type").toLowerCase();
                 if(type === "button" || type === "checkbox" || type === "radio") {
                     res.type = "btn";
@@ -129,15 +177,21 @@ while(true) {
             }
 
             else if(tag === "LABEL") {
-                if(node.hasAttribute("for") && document.querySelector("[id=\'" + node.getAttribute("for") + "\']") !== null) return NodeFilter.FILTER_REJECT;
-                if(node.childNodes.length > 0) return this.acceptNode(node.firstChild);
+                if(node.hasAttribute("for")) {
+                    var target = document.querySelector("[id=\'" + node.getAttribute("for") + "\']");
+                    var first_non_empty = get_first_non_empty(node, node.getAttribute("for"));
+                    if(target !== null && first_non_empty === target) return this.acceptNode(target);
+                    return NodeFilter.FILTER_REJECT;
+                }
+                if(node.childNodes.length > 0) return this.acceptNode(get_first_non_empty(node));
+                return NodeFilter.FILTER_ACCEPT;
             }
 
             else if(tag === "DATALIST") {
                 return NodeFilter.FILTER_REJECT;
             }
 
-            else if(node.nodeType === Node.ELEMENT_NODE && node.tagName !== "UL") {
+            else if(node.nodeType === Node.ELEMENT_NODE && tag !== "UL" && !tag.includes("GROUP") && tag !== "MAIN" && !class_.includes("button-bar")) {
                 if((node.onclick !== null && node.onclick !== undefined) || role === "button" || role === "radio" || role === "checkbox" || node.hasAttribute("ng-click") || class_.includes("btn") || class_.includes("button")) {
 
                     if(node.hasAttribute("class") && node.getAttribute("class").includes("dropdown")) res.nogroup = true;
@@ -154,6 +208,7 @@ while(true) {
 
                 res.label = get_label(node);
                 if(res.label !== null && res.label !== undefined) res.text = res.label.textContent.replace(/\s{2,}/gm, ' ').trim();
+                else if(node.hasAttribute("aria-label")) res.text = node.getAttribute("aria-label");
                 else res.text = get_text_content(node).replace(/\s{2,}/gm, ' ').trim();
             }
 
@@ -163,14 +218,13 @@ while(true) {
                 break;
             }
 
-            if(res.type !== "btn") {
-                var range = document.createRange();
-                range.selectNodeContents(node);
-                var rects = range.getClientRects();
-                if(rects.length > 0) {
-                    res.rects = rects[0];
-                }
+            var range = document.createRange();
+            range.selectNodeContents(tag === "INPUT" ? node.parentNode : node);
+            var rects = range.getClientRects();
+            if(rects.length > 0) {
+                res.rects = rects[0];
             }
+            if(frame !== null) res.frame = frame;
 
             res.pos = pos;
             list.push(res);
@@ -178,94 +232,83 @@ while(true) {
         }
     });
     while(walker.nextNode()) {}
+}
 
-    for(var i = 0; i < list.length; i++) {
-        var current = list[i];
-        if(current.type !== "btn" || current.nogroup) continue;
-        var group = [i];
-        var prev = i;
-        i++;
-        var diff = -1;
-        var lt = false;
-        for(;i<list.length; i++) {
-            let cmp = list[i];
-            if(cmp.type === "txt") continue;
-            if(cmp.type !== "btn" || cmp.nogroup) break;
+init_list(null, document, null);
 
-            if(diff !== -1) {
-                if(((cmp.pos)-(list[prev].pos)) !== diff) {
-                    if(group.length === 2) i=i-2;
-                    break;
-                }
+for(var i = 0; i < list.length; i++) {
+    var current = list[i];
+    if(current.type !== "btn" || current.nogroup) continue;
+    var group = [i];
+    var prev = i;
+    i++;
+    var diff = -1;
+    for(;i<list.length; i++) {
+        let cmp = list[i];
+        if(cmp.type !== "btn" || cmp.nogroup) break;
 
-                group.push(i);
-                prev = i;
-
-                continue;
+        if(diff !== -1) {
+            if(((cmp.pos)-(list[prev].pos)) !== diff) {
+                if(group.length === 2) i=i-2;
+                break;
             }
-            diff = (cmp.pos)-(current.pos);
+
             group.push(i);
             prev = i;
+
+            continue;
         }
-        if(group.length > 1) {
-            for(var j = 0; j < group.length; j++) {
+        diff = (cmp.pos)-(current.pos);
+        group.push(i);
+        prev = i;
+    }
+    if(group.length > 1) {
+        for(var j = 0; j < group.length; j++) {
 
-                if(list[group[j]].lcp !== undefined) continue;
-                var n = 0;
-                var exit = false;
-                var parent = null;
-                var glength = 1;
-                while(!exit) {
-                    n++;
-                    parent = nth_parent(list[group[j]].node, n);
-                    if(parent === null) {
-                        exit = true;
-                        break;
-                    }
-                    if(parent.tagName === "BODY") break;
-                    for(var k = 0; k < group.length; k++) {
-                        if(k === j) continue;
-                        if(list[group[k]].lcp !== undefined) continue;
-                        if(parent !== nth_parent(list[group[k]].node, n)) continue;
+            if(list[group[j]].lcp !== undefined) continue;
+            var n = 0;
+            var exit = false;
+            var parent = null;
+            var glength = 1;
+            while(!exit) {
+                n++;
+                parent = nth_parent(list[group[j]].node, n);
+                if(parent === null) {
+                    exit = true;
+                    break;
+                }
+                if(parent.tagName === "BODY") break;
+                for(var k = 0; k < group.length; k++) {
+                    if(k === j) continue;
+                    if(list[group[k]].lcp !== undefined) continue;
+                    if(parent !== nth_parent(list[group[k]].node, n)) continue;
 
-                        var hs = nth_parent(list[group[k]].node, n-1);
-                        list[group[k]].lcp = parent;
-                        if((list[group[k]].text === undefined)) list[group[k]].text = hs.textContent.trim();
-                        list[group[k]].pn = n;
-                        list[group[k]].hs = hs;
-                        glength++;
+                    var hs = nth_parent(list[group[k]].node, n-1);
+                    list[group[k]].lcp = parent;
+                    if((list[group[k]].text === undefined)) list[group[k]].text = hs.textContent.trim();
+                    list[group[k]].pn = n;
+                    list[group[k]].hs = hs;
+                    glength++;
 
-                        exit = true;
-                    }
-                    if(exit) {
-                        var hs = nth_parent(list[group[j]].node, n-1);
-                        list[group[j]].lcp = parent;
-                        if((list[group[j]].text === undefined)) list[group[j]].text = hs.textContent.trim();
-                        list[group[j]].pn = n;
-                        list[group[j]].glength = glength;
-                        list[group[j]].hs = hs;
+                    exit = true;
+                }
+                if(exit) {
+                    var hs = nth_parent(list[group[j]].node, n-1);
+                    list[group[j]].lcp = parent;
+                    if((list[group[j]].text === undefined)) list[group[j]].text = hs.textContent.trim();
+                    list[group[j]].pn = n;
+                    list[group[j]].glength = glength;
+                    list[group[j]].hs = hs;
 
-                        var range = document.createRange();
-                        range.selectNodeContents(hs);
-                        var rects = range.getClientRects();
-                        if(rects.length > 0) {
-                            list[group[j]].rects = rects[0];
-                        }
+                    var range = document.createRange();
+                    range.selectNodeContents(hs);
+                    var rects = range.getClientRects();
+                    if(rects.length > 0) {
+                        list[group[j]].rects = rects[0];
                     }
                 }
             }
         }
     }
-    var empty = true;
-    for(var i = 0; i < list.length; i++) {
-        let type = list[i].type;
-        if(type === "txt") continue;
-        if(type === "submit") continue;
-        if(type === "btn" && list[i].glength === undefined) continue;
-        empty = false;
-        break;
-    }
-    if(!empty || retry) break;
-    retry = true;
 }
 return list;

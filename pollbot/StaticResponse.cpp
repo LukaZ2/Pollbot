@@ -97,6 +97,10 @@ bool get_static_text_response(const std::string& title, std::string& out) {
 bool get_static_multiple_choice_response(const std::string& title, const std::vector<std::string>& options, int& out) {
     for(int i = 0; i < multiple_choice_responses.size(); i++) {
         if(!match_criteria(title, options, multiple_choice_responses[i]["search"])) continue;
+        if(multiple_choice_responses[i]["response"].is_null()) {
+            out = -1;
+            return true;
+        }
         for(int j = 0; j < options.size(); j++) {
             if(!match_criteria(options[j], {}, multiple_choice_responses[i]["response"])) continue;
             out = j;
@@ -180,19 +184,25 @@ void try_translate_mc(std::string& title, std::vector<std::string>& options) {
 }
 
 bool extract_json_answer(const std::string& str, std::vector<int>& out) {
+    bool responded_json = true;
     size_t first = str.find("{\"");
+    if(first == std::string::npos) {
+        responded_json = false;
+        first = str.find(":");
+    }
     if(first == std::string::npos) {
         char c = get_first_alpha(str);
         assert_(c != '\0');
         size_t num = get_alphabet().find(c);
         return !out.empty();
     }
-    std::string to_split = str.substr(first+2, str.length());
+    std::string to_split = responded_json ? str.substr(first+2, str.length()) : str;
     std::vector<std::string> splitted;
-    split(to_split, "{\"", splitted);
+    responded_json ? split(to_split, "{\"", splitted) : split(to_split, ":", splitted);
 
     for(auto& s : splitted) {
-        size_t num = get_alphabet().find(s.at(0));
+        size_t num = responded_json ? get_alphabet().find(s.at(0)) : get_alphabet().find(*(s.end()));
+        if(!responded_json && s.length() > 1 && *(s.end()-1) == ' ') continue;
         if(num != std::string::npos) out.push_back(num);
     }
     return !out.empty();
@@ -213,7 +223,7 @@ void StaticResponse::get_multiple_choice_response(const std::string& title, cons
 
     std::string title_translated = title;
     std::vector<std::string> options_translated = options;
-    try_translate_mc(title_translated, options_translated);
+    //try_translate_mc(title_translated, options_translated);
 
     std::string prompt = title_translated;
 
@@ -237,7 +247,7 @@ void StaticResponse::get_multiple_choice_response(const std::string& title, cons
 
     DEBUG("Prompt:\n{}", prompt);
 
-    nlohmann::json response_json = LLama::make_prompt(prompt, "You are a person taking an online survey. Choose the options that are most realistic.", context);
+    nlohmann::json response_json = LLama::make_prompt(prompt, "You are a person taking an online survey. Choose the provided options that the survey is looking for.", context);
     std::string response = response_json["response"];
     context = response_json["context"];
 
