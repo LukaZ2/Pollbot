@@ -35,6 +35,15 @@ bool Parser::FormParser::get_form_tree(MarionetteClient* client, nlohmann::json&
     return true;
 }
 
+bool Parser::FormParser::handle_captchas(MarionetteClient* client, std::future<void>& done)
+{
+    std::promise<void> p;
+    done = p.get_future();
+    p.set_value();
+    return true;
+}
+
+
 bool Parser::FormParser::has_interactables(const nlohmann::json& tree)
 {
     for(int i = 0; i < tree.size(); i++) {
@@ -147,6 +156,9 @@ void swap_frame(MarionetteClient* client, nlohmann::json& cframe, const nlohmann
 #define NODE_ERR(t) ERROR("{} Node: {}, Tree: {}", t, node.dump(), tree.dump())
 bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::json& tree, FormCache& question_cache)
 {
+    std::future<void> handle_captchas_done;
+    assert_em(handle_captchas(client, handle_captchas_done), "handle_captchas() failed.");
+
     std::vector<nlohmann::json> new_cache;
     int l_clickable = -1;
     bool save_button = true;
@@ -161,7 +173,10 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
         bool skip = vector_contains(question_cache.tree_cache, node["node"]);
         if(skip) new_cache.push_back(node["node"]);
-        if(type != "btn" || node.contains("lcp")) save_button = true;
+        if(type != "btn" || node.contains("lcp")) {
+            save_button = true;
+            l_clickable = -1;
+        }
 
         if(type == "ti") {
             if(skip) continue;
@@ -331,6 +346,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
         continue;
     }
 
+    handle_captchas_done.wait();
     sleep_ms(400);
 
     if(l_clickable != -1) swap_frame(client, cframe, tree[l_clickable].contains("frame") ? tree[l_clickable]["frame"] : nullptr);

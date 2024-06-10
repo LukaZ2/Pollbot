@@ -3,6 +3,8 @@
 #include <string>
 #include <memory>
 #include <marionette/MarionetteClient.h>
+#include <future>
+#include <thread>
 
 namespace Parser {
 
@@ -20,6 +22,7 @@ namespace Parser {
 
         bool get_form_tree(MarionetteClient* client, nlohmann::json& tree);
         bool has_interactables(const nlohmann::json& tree);
+        bool handle_captchas(MarionetteClient* client, std::future<void>& done);
 
         virtual bool handle_form_tree(MarionetteClient* client, nlohmann::json& tree, FormCache& question_cache);
     };

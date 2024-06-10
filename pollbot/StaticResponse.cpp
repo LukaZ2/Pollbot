@@ -199,10 +199,12 @@ bool extract_json_answer(const std::string& str, std::vector<int>& out) {
     std::string to_split = responded_json ? str.substr(first+2, str.length()) : str;
     std::vector<std::string> splitted;
     responded_json ? split(to_split, "{\"", splitted) : split(to_split, ":", splitted);
+    if(!responded_json) splitted.erase(splitted.end());
 
     for(auto& s : splitted) {
-        size_t num = responded_json ? get_alphabet().find(s.at(0)) : get_alphabet().find(*(s.end()));
-        if(!responded_json && s.length() > 1 && *(s.end()-1) == ' ') continue;
+        size_t num = responded_json ? get_alphabet().find(s.at(0)) : get_alphabet().find(*(s.end()-1));
+        DEBUG("num: {}", num);
+        if(!responded_json && s.length() > 1 && *(s.end()-2) != ' ') continue;
         if(num != std::string::npos) out.push_back(num);
     }
     return !out.empty();
@@ -269,4 +271,5 @@ void StaticResponse::get_multiple_choice_response(const std::string& title, cons
         else it++;
     }
     if(out.empty()) out = {0};
+    DEBUG("Option numbers: {}", nlohmann::json(out).dump());
 }
