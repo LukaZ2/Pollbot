@@ -37,9 +37,9 @@ bool Parser::FormParser::get_form_tree(MarionetteClient* client, nlohmann::json&
 
 bool Parser::FormParser::handle_captchas(MarionetteClient* client, std::future<void>& done)
 {
-    std::promise<void> p;
-    done = p.get_future();
-    p.set_value();
+    done = std::async(std::launch::async, [client] {
+
+    });
     return true;
 }
 
@@ -192,7 +192,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             swap_frame(client, cframe, frame);
             if(!client->execute_script(
-                "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));",
+                "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));arguments[0].dispatchEvent(new Event('input'));",
                     nlohmann::json::array({node["node"], response})).get().success) {
                  NODE_ERR("Failed to set value of text input");
                  continue;
@@ -221,7 +221,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
             swap_frame(client, cframe, frame);
             if(!client->execute_script(
-                "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));",
+                "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));arguments[0].dispatchEvent(new Event('input'));",
                     nlohmann::json::array({node["node"], response})).get().success) {
                 NODE_ERR("Failed to set value of number.");
                 continue;

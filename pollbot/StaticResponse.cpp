@@ -126,6 +126,10 @@ void StaticResponse::get_text_response(const std::string& title, std::string& ou
     nlohmann::json response = LLama::make_prompt(prompt, "You are a person trying to qualify for an online survey. Give answers that the survey is likely looking for and keep them short.", context);
     out = response["response"];
     rm_umlaut(out);
+    int num;
+    if(txt_to_number(out, num)) {
+        out = std::to_string(num);
+    }
     context = response["context"];
     DEBUG("Response: {}", out);
 }

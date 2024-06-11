@@ -1,1 +1,45 @@
-function adjacent_text(e){for(var t="";e&&(e.nodeType===Node.TEXT_NODE||1===e.childNodes.length&&e.firstChild.nodeType===Node.TEXT_NODE);)t+=e.textContent,e=e.nextSibling;return t}var result=[];document.normalize();for(var i=0;i<arguments.length;i++){for(var walker=document.createTreeWalker(document.querySelector("body"),NodeFilter.SHOW_TEXT),best={ts:null};walker.nextNode();){var style,range,rects,xd,yd,size,ts,node=walker.currentNode;"LABEL"===node.parentElement.nodeName&&node.parentElement.hasAttribute("for")&&null!==document.querySelector("input[id='"+node.parentElement.getAttribute("for")+"']")||(null!=(style=window.getComputedStyle(node.parentElement))&&"hidden"==style.visibility||null!=style&&"none"==style.display||""!=node.textContent.replace(/\s{2,}/gm,"").trim()&&((range=document.createRange()).selectNodeContents(node),0<(rects=range.getClientRects()).length&&(rects[0].y+rects[0].height>=arguments[i].y||(xd=arguments[i].x-rects[0].x,yd=arguments[i].y-rects[0].y,xd<0&&(xd*=-1),yd<0&&(yd*=-1),null===(size=parseInt(style.fontSize))&&(size=1),ts=4*xd+yd-30*size,"italic"===style.fontStyle&&(ts+=400),(null===best.ts||best.ts>ts)&&(best={ts:ts,text:adjacent_text(node)})))))}result.push(best.text.trim())}return result;
+function adjacent_text(node) {
+    var result = "";
+    while(node) {
+        if(node.nodeType !== Node.TEXT_NODE && (node.childNodes.length !== 1 || node.firstChild.nodeType !== Node.TEXT_NODE)) break;
+        result+=node.textContent;
+        node = node.nextSibling;
+    }
+    return result;
+}
+var result = [];
+document.normalize();
+for(var i = 0; i < arguments.length; i++) {
+    var walker = document.createTreeWalker(document.querySelector("body"), NodeFilter.SHOW_TEXT);
+    var best = {"ts": null};
+
+    while(walker.nextNode()) {
+        var node = walker.currentNode;
+        if(node.parentElement.nodeName === "LABEL" && node.parentElement.hasAttribute("for") && document.querySelector("input[id=\'" + node.parentElement.getAttribute("for") + "\']") !== null) continue;
+        var style = window.getComputedStyle(node.parentElement);
+        if(style != null && style.visibility == "hidden") continue;
+        if(style != null && style.display == "none") continue;
+        if(node.textContent.replace(/\s{2,}/gm, '').trim() == "") continue;
+
+        //if(!node.textContent.includes(" ")) continue;
+        var range = document.createRange();
+        range.selectNodeContents(node);
+        var rects = range.getClientRects();
+        if(rects.length === 0) continue;
+        if(rects[0].y + rects[0].height >= arguments[i].y) continue;
+
+        var xd = (arguments[i].x)-(rects[0].x);
+        var yd = (arguments[i].y)-(rects[0].y);
+        if(xd < 0) xd = xd*(-1);
+        if(yd < 0) yd = yd*(-1);
+
+        var size = parseInt(style.fontSize);
+        if(size === null) size = 1;
+        var ts = ((xd*4)+(yd))-(size*30);
+        if(style.fontStyle === "italic") ts+=400;
+
+        if(best.ts === null || best.ts > ts) best = {"ts": ts, "text": adjacent_text(node)};
+    }
+    result.push(best.text.trim());
+}
+return result;

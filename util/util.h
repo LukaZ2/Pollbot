@@ -72,6 +72,7 @@ void split(const std::string& in, const std::string& c, std::vector<std::string>
 char get_first_alpha(const std::string& str);
 void replace(std::string& str, const std::string& to_replace, const std::string& target, int cpos = 0);
 void rm_umlaut(std::string& str);
+bool txt_to_number(std::string str, int& out);
 
 template<class T, int I>
 bool array_contains(T (&array)[I], T& t) {

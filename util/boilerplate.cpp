@@ -216,7 +216,6 @@ bool close_all(MarionetteClient* client) {
         assert_(client->close_window().get().success);
     }
     assert_(client->switch_to_window(tabs[tabs.size()-1]).get().success);
-    assert_(client->maximize_window().get().success);
     return true;
 }
 

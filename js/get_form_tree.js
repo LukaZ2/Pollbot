@@ -1,1 +1,315 @@
-function node_rendered(e){if(!(e instanceof Element))return!0;var t=getComputedStyle(e);if("none"===t.display)return!1;if("visible"!==t.visibility)return!1;if(t.opacity<.1)return!1;if(e.offsetWidth+e.offsetHeight+e.getBoundingClientRect().height+e.getBoundingClientRect().width===0)return!1;t={x:e.getBoundingClientRect().left+e.offsetWidth/2,y:e.getBoundingClientRect().top+e.offsetHeight/2};if(t.x<0)return!1;if(t.x>(document.documentElement.clientWidth||window.innerWidth))return!1;if(t.y<0)return!1;if(t.y>(document.documentElement.clientHeight||window.innerHeight))return!1;let n=document.elementFromPoint(t.x,t.y);do{if(n===e)return!0}while(n=n.parentNode);return!1}function node_visible(e){if(e.nodeType!==Node.ELEMENT_NODE)return null===e.parentNode||void 0===e.parentNode||node_visible(e.parentNode);if(!e.checkVisibility())return!1;e=window.getComputedStyle(e);return null==e||"hidden"!==e.visibility}function get_first_non_empty(t,n){for(var r=0;r<t.childNodes.length;r++){let e=t.childNodes[r];if(e.nodeType===Node.ELEMENT_NODE&&node_visible(e)){if(null==n)return e;if(n===(e.hasAttribute("id")?e.getAttribute("id"):null))return e}}return null}function nth_parent(e,t){for(var n=e,r=0;r<t;r++){if(null==n||void 0===n.parentNode||null===n.parentNode)return null;n=n.parentNode}return n}function get_label(e){if(!e.hasAttribute("id"))return"LABEL"===e.parentNode.tagName&&get_first_non_empty(e.parentNode)===e?e.parentNode:null;var t=document.querySelectorAll("label[for='"+e.getAttribute("id")+"']");if(0===t.length)return null;for(var n=0;n<t.length;n++)if(node_visible(t[n])&&""!==t[n].textContent.replace(/\s{2,}/gm," ").trim())return t[n];return null}function get_text_content(e){for(var t=document.createTreeWalker(e,NodeFilter.SHOW_TEXT),n="";t.nextNode();)n+=t.currentNode.textContent.trim(),n+=" ";return n}var list=[];let args=arguments;function init_list(e,t,p){if(null===e)if(window.location.href.startsWith("https://web.pollpay.app")){if(0===document.forms.length)return;e=document.forms[0]}else e=document.documentElement;for(var g=0,n=t.createTreeWalker(e,NodeFilter.SHOW_ALL,{acceptNode:function(e){if(null===e)return NodeFilter.FILTER_ACCEPT;if("IFRAME"===e.tagName||"FRAME"===e.tagName)return null!==e.contentDocument&&init_list(e.contentDocument.documentElement,e.contentDocument,e),NodeFilter.FILTER_REJECT;if("OPTION"===e.tagName)return NodeFilter.FILTER_REJECT;if("SCRIPT"===e.tagName)return NodeFilter.FILTER_REJECT;if(!node_visible(e)){if(e.nodeType!==Node.ELEMENT_NODE)return NodeFilter.FILTER_REJECT;var t=get_label(e);if(null===t||!node_visible(t))return NodeFilter.FILTER_REJECT}g++;let n=e.tagName;void 0!==n&&(n=n.toUpperCase());var r={},i=!0;let o=e.nodeType===Node.ELEMENT_NODE&&e.hasAttribute("class")?e.getAttribute("class").toLowerCase():"";var l=e.nodeType===Node.ELEMENT_NODE&&e.hasAttribute("role")?e.getAttribute("role").toLowerCase():"";if("SELECT"===n||"listbox"==l){r.type="mc",r.options=[];for(var u=e.querySelectorAll('option,[role="option"]'),s=0;s<u.length;s++)r.options.push({text:u[s].textContent})}else if(e.nodeType===Node.TEXT_NODE){if(r.text=e.textContent.replace(/\s{2,}/gm," ").trim(),""===r.text)return NodeFilter.FILTER_REJECT;i=!(r.type="txt")}else if("TEXTAREA"===n||"textbox"==l)r.type="ti";else if("number"==l||"range"==l||"tel"==l)r.type="number",r.max=parseInt(e.getAttribute("max")),r.min=parseInt(e.getAttribute("min")),r.step=parseInt(e.getAttribute("step"));else if("INPUT"===n){var a=e.getAttribute("type").toLowerCase();if("button"===a||"checkbox"===a||"radio"===a)r.type="btn";else if("text"===a||"textarea"===a)r.type="ti";else if("submit"===a)r.type="submit";else if("number"===a||"range"===a||"tel"===a)r.type="number",r.max=parseInt(e.getAttribute("max")),r.min=parseInt(e.getAttribute("min")),r.step=parseInt(e.getAttribute("step"));else{if(!e.hasAttribute("list"))return NodeFilter.FILTER_REJECT;if(r.type="mc",null===document.querySelector('datalist[id="'+e.getAttribute("list")+'"]'))return NodeFilter.FILTER_REJECT;r.options=[];for(var d=e.querySelectorAll('option,[role="option"]'),s=0;s<d.length;s++)r.options.push({text:d[s].textContent,node:d[s]})}}else if("BUTTON"===n||"MAT-CHECKBOX"===n||"MAT-RADIO-BUTTON"===n||"A"===e.tagName&&e.hasAttribute("href"))o.includes("dropdown")&&(r.nogroup=!0),e.hasAttribute("data-toggle")&&(r.nogroup=!0),r.type="btn";else{if("LABEL"===n){if(e.hasAttribute("for")){t=document.querySelector("[id='"+e.getAttribute("for")+"']"),a=get_first_non_empty(e,e.getAttribute("for"));return null!==t&&a===t?this.acceptNode(t):NodeFilter.FILTER_REJECT}return 0<e.childNodes.length?this.acceptNode(get_first_non_empty(e)):NodeFilter.FILTER_ACCEPT}if("DATALIST"===n)return NodeFilter.FILTER_REJECT;if(e.nodeType!==Node.ELEMENT_NODE||"UL"===n||n.includes("GROUP")||"MAIN"===n||o.includes("button-bar"))return NodeFilter.FILTER_ACCEPT;if(!(null!==e.onclick&&void 0!==e.onclick||"button"===l||"radio"===l||"checkbox"===l||e.hasAttribute("ng-click")||o.includes("btn")||o.includes("button")))return NodeFilter.FILTER_ACCEPT;e.hasAttribute("class")&&e.getAttribute("class").includes("dropdown")&&(r.nogroup=!0),e.hasAttribute("data-toggle")&&(r.nogroup=!0),r.type="btn"}e.nodeType===Node.ELEMENT_NODE&&(r.node=e,r.label=get_label(e),null!==r.label&&void 0!==r.label?r.text=r.label.textContent.replace(/\s{2,}/gm," ").trim():e.hasAttribute("aria-label")?r.text=e.getAttribute("aria-label"):r.text=get_text_content(e).replace(/\s{2,}/gm," ").trim());for(s=0;s<args.length;s++)if(args[s]===e){r.nogroup=!0;break}l=document.createRange();l.selectNodeContents("INPUT"===n?e.parentNode:e);l=l.getClientRects();return 0<l.length&&(r.rects=l[0]),null!==p&&(r.frame=p),r.pos=g,list.push(r),i?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT}});n.nextNode(););}init_list(null,document,null);for(var i=0;i<list.length;i++){var current=list[i];if("btn"===current.type&&!current.nogroup){var group=[i],prev=i;i++;for(var diff=-1;i<list.length;i++){let e=list[i];if("btn"!==e.type||e.nogroup)break;if(-1===diff)diff=e.pos-current.pos,group.push(i),prev=i;else{if(e.pos-list[prev].pos!==diff){2===group.length&&(i-=2);break}group.push(i),prev=i}}if(1<group.length)for(var j=0;j<group.length;j++)if(void 0===list[group[j]].lcp)for(var n=0,exit=!1,parent=null,glength=1;!exit;){if(n++,null===(parent=nth_parent(list[group[j]].node,n))){exit=!0;break}if("BODY"===parent.tagName)break;for(var hs,range,rects,k=0;k<group.length;k++)k!==j&&void 0===list[group[k]].lcp&&parent===nth_parent(list[group[k]].node,n)&&(hs=nth_parent(list[group[k]].node,n-1),list[group[k]].lcp=parent,void 0===list[group[k]].text&&(list[group[k]].text=hs.textContent.trim()),list[group[k]].pn=n,list[group[k]].hs=hs,glength++,exit=!0);exit&&(hs=nth_parent(list[group[j]].node,n-1),list[group[j]].lcp=parent,void 0===list[group[j]].text&&(list[group[j]].text=hs.textContent.trim()),list[group[j]].pn=n,list[group[j]].glength=glength,list[group[j]].hs=hs,(range=document.createRange()).selectNodeContents(hs),0<(rects=range.getClientRects()).length&&(list[group[j]].rects=rects[0]))}}}return list;
+function node_rendered(elem) {
+    if (!(elem instanceof Element)) return true;
+    const style = getComputedStyle(elem);
+    if (style.display === 'none') return false;
+    if (style.visibility !== 'visible') return false;
+    if (style.opacity < 0.1) return false;
+    if (elem.offsetWidth + elem.offsetHeight + elem.getBoundingClientRect().height +
+        elem.getBoundingClientRect().width === 0) {
+        return false;
+    }
+    const elemCenter   = {
+        x: elem.getBoundingClientRect().left + elem.offsetWidth / 2,
+        y: elem.getBoundingClientRect().top + elem.offsetHeight / 2
+    };
+    if (elemCenter.x < 0) return false;
+    if (elemCenter.x > (document.documentElement.clientWidth || window.innerWidth)) return false;
+    if (elemCenter.y < 0) return false;
+    if (elemCenter.y > (document.documentElement.clientHeight || window.innerHeight)) return false;
+    let pointContainer = document.elementFromPoint(elemCenter.x, elemCenter.y);
+    do {
+        if (pointContainer === elem) return true;
+    } while (pointContainer = pointContainer.parentNode);
+    return false;
+}
+function node_visible(el) {
+    if(el.nodeType !== Node.ELEMENT_NODE) return el.parentNode !== null && el.parentNode !== undefined ? node_visible(el.parentNode) : true;
+    if(!el.checkVisibility()) return false;
+    var style = window.getComputedStyle(el);
+    //if(!node_rendered(el)) return false;
+    return style === null || style === undefined || (style.visibility !== "hidden");
+}
+function get_first_non_empty(node, for_id) {
+    for(var i = 0; i < node.childNodes.length; i++) {
+        let tmp = node.childNodes[i];
+        if(tmp.nodeType !== Node.ELEMENT_NODE) continue;
+        if(!node_visible(tmp)) continue;
+        if(for_id === undefined || for_id === null) return tmp;
+        if(for_id === (tmp.hasAttribute("id") ? tmp.getAttribute("id") : null)) return tmp;
+    }
+    return null;
+}
+function nth_parent(node, n) {
+    var tmp = node;
+    for(var i = 0; i < n; i++) {
+        if(tmp === undefined || tmp === null || tmp.parentNode === undefined || tmp.parentNode === null) return null;
+        tmp = tmp.parentNode;
+    }
+    return tmp;
+}
+function get_label(node, show_invisible) {
+    if(!node.hasAttribute("id")) {
+        if(node.parentNode.tagName === "LABEL" && get_first_non_empty(node.parentNode) === node) return node.parentNode;
+        return null;
+    }
+    if(show_invisible === undefined) show_invisible = false;
+    var labels = document.querySelectorAll("label[for=\'" + node.getAttribute("id") + "\']");
+    if(labels.length === 0) return null;
+    for(var i = 0; i < labels.length; i++) {
+        if((!show_invisible && !node_visible(labels[i])) || labels[i].textContent.replace(/\s{2,}/gm, ' ').trim() === "") continue;
+        return labels[i];
+    }
+    return null;
+}
+function get_text_content(node) {
+    var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    var result = "";
+    while(walker.nextNode()) {
+        result += walker.currentNode.textContent.trim();
+        result += " ";
+    }
+    return result;
+}
+
+var list = [];
+let args = arguments;
+
+function init_list(root, doc, frame) {
+
+    if(root === null) {
+        if(window.location.href.startsWith("https://web.pollpay.app")) {
+            if(document.forms.length === 0) return;
+            root = document.forms[0];
+        }
+        else {
+            root = document.documentElement;
+        }
+    }
+
+    var pos = 0;
+    var walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL, {
+        acceptNode(node) {
+            if(node === null) return NodeFilter.FILTER_ACCEPT;
+            if(node.tagName === "IFRAME" || node.tagName === "FRAME") {
+                if(node.contentDocument !== null) init_list(node.contentDocument.documentElement, node.contentDocument, node);
+                return NodeFilter.FILTER_REJECT;
+            }
+            //if(node.nodeType === Node.ELEMENT_NODE && node.tagName === "LABEL" && node.hasAttribute("for") && document.querySelector("#" + node.getAttribute("for")) !== null) return NodeFilter.FILTER_REJECT;
+            if(node.tagName === "OPTION") return NodeFilter.FILTER_REJECT;
+            if(node.tagName === "SCRIPT") return NodeFilter.FILTER_REJECT;
+            if(!node_visible(node)) {
+                if(node.nodeType !== Node.ELEMENT_NODE) return NodeFilter.FILTER_REJECT;
+                var label = get_label(node);
+                if(label === null || !node_visible(label)) return NodeFilter.FILTER_REJECT;
+            }
+
+            pos++;
+
+            let tag = node.tagName;
+            if(tag !== undefined) tag = tag.toUpperCase();
+            var res = {};
+            var skip = true;
+            let class_ = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("class")) ? node.getAttribute("class").toLowerCase() : "";
+
+            var role = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("role")) ? node.getAttribute("role").toLowerCase() : "";
+
+            if(tag === "SELECT" || role == "listbox") {
+                res.type = "mc";
+                res.options = [];
+                let options = node.querySelectorAll("option,[role=\"option\"]");
+                for(var i = 0; i < options.length; i++) {
+                    res.options.push({text: options[i].textContent});
+                }
+            }
+
+            else if(node.nodeType === Node.TEXT_NODE) {
+                res.text = node.textContent.replace(/\s{2,}/gm, ' ').trim();
+                if(res.text === "") return NodeFilter.FILTER_REJECT;
+                res.type = "txt";
+                skip = false;
+            }
+
+            else if(tag === "TEXTAREA" || role == "textbox") {
+                res.type = "ti";
+            }
+
+            else if(role == "number" || role == "range" || role == "tel") {
+                res.type = "number";
+                res.max = parseInt(node.getAttribute("max"));
+                res.min = parseInt(node.getAttribute("min"));
+                res.step = parseInt(node.getAttribute("step"));
+            }
+
+            else if(tag === "INPUT") {
+                let type = node.getAttribute("type").toLowerCase();
+                if(type === "button" || type === "checkbox" || type === "radio") {
+                    res.type = "btn";
+                }
+                else if(type === "text" || type === "textarea") {
+                    res.type = "ti";
+                }
+                else if(type === "submit") {
+                    res.type = "submit";
+                }
+                else if(type === "number" || type === "range" || type === "tel") {
+                    res.type = "number";
+                    res.max = parseInt(node.getAttribute("max"));
+                    res.min = parseInt(node.getAttribute("min"));
+                    res.step = parseInt(node.getAttribute("step"));
+                }
+                else if(node.hasAttribute("list")) {
+                    res.type = "mc";
+                    let datalist = document.querySelector("datalist[id=\"" + node.getAttribute("list") + "\"]");
+                    if(datalist === null) return NodeFilter.FILTER_REJECT;
+
+                    res.options = [];
+                    let options = node.querySelectorAll("option,[role=\"option\"]");
+                    for(var i = 0; i < options.length; i++) {
+                        res.options.push({text: options[i].textContent, node: options[i]});
+                    }
+                }
+                else return NodeFilter.FILTER_REJECT;
+            }
+
+            else if(tag === "BUTTON" || tag === "MAT-CHECKBOX" || tag === "MAT-RADIO-BUTTON" || (node.tagName === "A" && node.hasAttribute("href"))) {
+                if(class_.includes("dropdown")) res.nogroup = true;
+                if(node.hasAttribute("data-toggle")) res.nogroup = true;
+                res.type = "btn";
+            }
+
+            else if(tag === "LABEL") {
+                if(node.hasAttribute("for")) {
+                    var target = document.querySelector("[id=\'" + node.getAttribute("for") + "\']");
+                    var first_non_empty = get_first_non_empty(node, node.getAttribute("for"));
+                    if(target !== null && first_non_empty === target) return this.acceptNode(target);
+                    return NodeFilter.FILTER_REJECT;
+                }
+                if(node.childNodes.length > 0) return this.acceptNode(get_first_non_empty(node));
+                return NodeFilter.FILTER_ACCEPT;
+            }
+
+            else if(tag === "DATALIST") {
+                return NodeFilter.FILTER_REJECT;
+            }
+
+            else if(node.nodeType === Node.ELEMENT_NODE && tag !== "UL" && !tag.includes("GROUP") && tag !== "MAIN" && !class_.includes("button-bar") && !class_.includes("container")) {
+                if((node.onclick !== null && node.onclick !== undefined) || role === "button" || role === "radio" || role === "checkbox" || node.hasAttribute("ng-click") || class_.includes("btn") || class_.includes("button")) {
+
+                    if(node.hasAttribute("class") && node.getAttribute("class").includes("dropdown")) res.nogroup = true;
+                    if(node.hasAttribute("data-toggle")) res.nogroup = true;
+                    res.type = "btn";
+                }
+                else return NodeFilter.FILTER_ACCEPT;
+            }
+
+            else return NodeFilter.FILTER_ACCEPT;
+
+            if(node.nodeType === Node.ELEMENT_NODE) {
+                res.node = node;
+
+                res.label = get_label(node, true);
+                if(res.label !== null && res.label !== undefined) res.text = res.label.textContent.replace(/\s{2,}/gm, ' ').trim();
+                else if(node.hasAttribute("aria-label")) res.text = node.getAttribute("aria-label");
+                else res.text = get_text_content(node).replace(/\s{2,}/gm, ' ').trim();
+            }
+
+            for(var i = 0; i < args.length; i++) {
+                if(args[i] !== node) continue;
+                res.nogroup = true;
+                break;
+            }
+
+            var range = document.createRange();
+            range.selectNodeContents(tag === "INPUT" ? node.parentNode : node);
+            var rects = range.getClientRects();
+            if(rects.length > 0) {
+                res.rects = rects[0];
+            }
+            if(frame !== null) res.frame = frame;
+
+            res.pos = pos;
+            list.push(res);
+            return skip ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    while(walker.nextNode()) {}
+}
+
+init_list(null, document, null);
+
+for(var i = 0; i < list.length; i++) {
+    var current = list[i];
+    if(current.type !== "btn" || current.nogroup) continue;
+    var group = [i];
+    var prev = i;
+    i++;
+    var diff = -1;
+    for(;i<list.length; i++) {
+        let cmp = list[i];
+        if(cmp.type !== "btn" || cmp.nogroup) break;
+
+        if(diff !== -1) {
+            if(((cmp.pos)-(list[prev].pos)) !== diff) {
+                if(group.length === 2) i=i-2;
+                break;
+            }
+
+            group.push(i);
+            prev = i;
+
+            continue;
+        }
+        diff = (cmp.pos)-(current.pos);
+        group.push(i);
+        prev = i;
+    }
+    if(group.length > 1) {
+        for(var j = 0; j < group.length; j++) {
+
+            if(list[group[j]].lcp !== undefined) continue;
+            var n = 0;
+            var exit = false;
+            var parent = null;
+            var glength = 1;
+            while(!exit) {
+                n++;
+                parent = nth_parent(list[group[j]].node, n);
+                if(parent === null) {
+                    exit = true;
+                    break;
+                }
+                if(parent.tagName === "BODY") break;
+                for(var k = 0; k < group.length; k++) {
+                    if(k === j) continue;
+                    if(list[group[k]].lcp !== undefined) continue;
+                    if(parent !== nth_parent(list[group[k]].node, n)) continue;
+
+                    var hs = nth_parent(list[group[k]].node, n-1);
+                    list[group[k]].lcp = parent;
+                    if((list[group[k]].text === undefined)) list[group[k]].text = hs.textContent.trim();
+                    list[group[k]].pn = n;
+                    list[group[k]].hs = hs;
+                    glength++;
+
+                    exit = true;
+                }
+                if(exit) {
+                    var hs = nth_parent(list[group[j]].node, n-1);
+                    list[group[j]].lcp = parent;
+                    if((list[group[j]].text === undefined)) list[group[j]].text = hs.textContent.trim();
+                    list[group[j]].pn = n;
+                    list[group[j]].glength = glength;
+                    list[group[j]].hs = hs;
+
+                    var range = document.createRange();
+                    range.selectNodeContents(hs);
+                    var rects = range.getClientRects();
+                    if(rects.length > 0) {
+                        list[group[j]].rects = rects[0];
+                    }
+                }
+            }
+        }
+    }
+}
+return list;

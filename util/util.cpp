@@ -5,6 +5,7 @@
 #include <thread>
 #include <codecvt>
 #include <locale>
+#include <map>
 
 Logger::Logger logger;
 
@@ -109,6 +110,32 @@ void rm_umlaut(std::string& str)
     replace(str, "Ü", "Ue");
     replace(str, "ü", "ue");
 }
+
+std::map<std::string, int> num_map = {
+{"zero", 0},
+{"one", 1},
+{"two", 2},
+{"three", 3},
+{"four", 4},
+{"five", 5},
+{"six", 6},
+{"seven", 7},
+{"eight", 8},
+{"nine", 9},
+{"ten", 10},
+{"eleven", 11},
+{"twelve", 12},
+};
+
+bool txt_to_number(std::string str, int& out)
+{
+    std::transform(str.begin(), str.end(), str.begin(), tolower);
+    auto it = num_map.find(str);
+    if(it == num_map.end()) return false;
+    out = (*it).second;
+    return true;
+}
+
 
 
 char get_first_alpha(const std::string& str) {
