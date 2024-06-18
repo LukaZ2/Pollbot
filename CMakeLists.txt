@@ -41,6 +41,8 @@ add_executable(Pollbot main.cpp
         ui/command/ConsoleCommand.h
         translate/Translate.cpp
         translate/Translate.h
+        pollbot/captcha/CaptchaHandler.cpp
+        pollbot/captcha/CaptchaHandler.h
 )
 
 include_directories(".")

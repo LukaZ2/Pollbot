@@ -110,6 +110,7 @@ bool get_prev_text_all(nlohmann::json& tree, int i, std::string& out, bool inclu
         }
         int y = tree[i].contains("rects") ? (int)tree[i]["rects"]["y"] : 0;
         if(ly > 0 && y > 0 && (ly-y) > 100) return !out.empty();
+        out.insert(0, " ");
         out.insert(0, tree[j]["text"]);
     }
 
@@ -132,19 +133,31 @@ bool get_text(nlohmann::json& tree, int i, std::string& out) {
 struct reject_text {
     std::string text;
     bool require_equals;
+    bool check_options = false;
 };
 std::vector<reject_text> reject_text = {
     {"nein", true},
     {"no", true},
-    {"datenschutzbedingungen", false},
-    {"datenschutzrichtlinien", false},
-    {"datenschutzrichtlinie", false},
-    {"datenschutzerklärung", false},
-    {"nutzungsbedingungen", false},
+    {"datenschutzbedingungen", true, true},
+    {"datenschutzrichtlinien", true, true},
+    {"datenschutzrichtlinie", true, true},
+    {"datenschutzerklärung", true, true},
+    {"nutzungsbedingungen", true, true},
+    {"datenschutzhinweis", true, true},
+    {"datenschutz-bestimmungen", true, true},
+    {"geschäftsbedingungen", false},
+    {"allgemeine geschäftsbedingungen", true, true},
+    {"cookie consent", false},
+    {"terms and agreements", true, true},
+    {"privacy policy", true, true},
+    {"privacy-policy", true, true},
     {"back", false},
+    {"previous", false},
     {"zurück", false},
     {"reject", false},
     {"ablehnen", false},
+    {"hilfe", true},
+    {"support", true},
 };
 
 void swap_frame(MarionetteClient* client, nlohmann::json& cframe, const nlohmann::json& frame) {
@@ -173,7 +186,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
         bool skip = vector_contains(question_cache.tree_cache, node["node"]);
         if(skip) new_cache.push_back(node["node"]);
-        if(type != "btn" || node.contains("lcp")) {
+        if(type != "btn") {
             save_button = true;
             l_clickable = -1;
         }
@@ -224,6 +237,17 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
                 "arguments[0].value=arguments[1];arguments[0].dispatchEvent(new Event('change'));arguments[0].dispatchEvent(new Event('input'));",
                     nlohmann::json::array({node["node"], response})).get().success) {
                 NODE_ERR("Failed to set value of number.");
+                continue;
+            }
+            new_cache.push_back(node["node"]);
+
+            continue;
+        }
+
+        if(type == "date") {
+            if(skip) continue;
+            if(!client->execute_script("arguments[0].value=\"1999-04-04\";arguments[0].dispatchEvent(new Event('change'));arguments[0].dispatchEvent(new Event('input'));", nlohmann::json::array({node["node"]})).get().success) {
+                NODE_ERR("Failed to set value of date.");
                 continue;
             }
             new_cache.push_back(node["node"]);
@@ -285,6 +309,16 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
 
                 options_str[option_count] = tree[i]["text"];
                 options_node[option_count] = tree[i]["node"];
+
+                std::string txt_lower = options_str[option_count];
+                std::transform(txt_lower.begin(), txt_lower.end(), txt_lower.begin(), tolower);
+                for(auto& t : reject_text) {
+                    if(!t.check_options) continue;
+                    if(t.require_equals ? t.text != txt_lower : (txt_lower.find(t.text) == std::string::npos)) continue;
+                    skip = true;
+                    break;
+                }
+
                 option_count++;
 
                 if(option_count == glength) break;
@@ -303,7 +337,7 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
                 for(auto& opt : response) {
                     if(opt == -1) continue;
                     set_mouse_random(client);
-                    if(js_click_element(client, options_node[opt])) {
+                    if(element_click_mouse_move(client, options_node[opt].front()) || js_click_element(client, options_node[opt])) {
                         clicked++;
                         sleep_ms(400);
                         continue;
@@ -313,23 +347,24 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
                 }
                 if(clicked == 0) continue;
                 new_cache.push_back(node["node"]);
+
+                save_button = true;
+                l_clickable = -1;
             }
 
             continue;
         }
 
-        if(type == "btn" && node["text"] == "Play") {
+        if(type == "btn" && (node["text"] == "Play" || node.contains("checkbox"))) {
             if(skip) continue;
-            if(element_click_mouse_move(client, node_id) || js_click_element(client, node["node"])) {
-                new_cache.push_back(tree[l_clickable]["node"]);
+            if(js_click_element(client, node["node"])) {
+                new_cache.push_back(node["node"]);
+                l_clickable = -1;
+                break;
             }
+            continue;
         }
-
-        // if(type == "submit") {
-        //     if(skip) continue;
-        //     l_clickable = i;
-        //     continue;
-        // }
+        if(skip) continue;
         if(!save_button) continue;
         std::string btn_text = node["text"].is_null() ? "" : node["text"];
         std::transform(btn_text.begin(), btn_text.end(), btn_text.begin(), tolower);
@@ -350,12 +385,19 @@ bool Parser::FormParser::handle_form_tree(MarionetteClient* client, nlohmann::js
     sleep_ms(400);
 
     if(l_clickable != -1) swap_frame(client, cframe, tree[l_clickable].contains("frame") ? tree[l_clickable]["frame"] : nullptr);
-    if(l_clickable != -1 && js_click_element(client, tree[l_clickable]["node"])) {
+    if(l_clickable != -1 && (element_click_mouse_move(client, tree[l_clickable]["node"].front()) || js_click_element(client, tree[l_clickable]["node"]))) {
         new_cache.push_back(tree[l_clickable]["node"]);
     }
 
     swap_frame(client, cframe, nullptr);
 
+    if(question_cache.tree_cache == new_cache) question_cache.unchanged++;
+
+    if(question_cache.unchanged >= 2) {
+        question_cache.tree_cache.clear();
+        question_cache.unchanged = 0;
+        return true;
+    }
     question_cache.tree_cache = new_cache;
     return true;
 }

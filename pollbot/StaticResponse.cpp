@@ -44,6 +44,8 @@ bool match_criteria(const std::string& input, const std::vector<std::string>& op
         auto& entry = criteria[i];
         bool require_all = entry.contains("require_all") ? (bool)entry["require_all"] : false;
         bool isolated = entry.contains("isolated") ? (bool)entry["isolated"] : false;
+        if(entry.contains("raw") ? (bool)entry["raw"] : false) input_lower = input;
+
         if(entry.contains("contains")) {
 
             int found_n = 0;
@@ -52,7 +54,7 @@ bool match_criteria(const std::string& input, const std::vector<std::string>& op
                 bool found = pos != std::string::npos;
                 if(found && isolated) {
                     std::string str(text);
-                    if(pos+str.length() < input_lower.length() && isalpha(input_lower.at(pos+str.length()+1))) found = false;
+                    if(pos+str.length() < input_lower.length() && isalpha(input_lower.at(pos+str.length()))) found = false;
                     if(pos > 0 && isalpha(input_lower.find(pos-1))) found = false;
                 }
                 if(found) found_n++;
@@ -113,14 +115,13 @@ bool get_static_multiple_choice_response(const std::string& title, const std::ve
 
 void StaticResponse::get_text_response(const std::string& title, std::string& out, nlohmann::json& context, const std::string& prompt_custom)
 {
+    DEBUG("Text-title: {}", title);
     if(get_static_text_response(title, out)) return;
     std::string prompt = title;
 
     // int confidence;
     // std::string detect_language = Translate::detect_language(prompt, confidence);
     // if(detect_language != "en" && confidence > 50) Translate::translate(prompt, detect_language, "en");
-
-    DEBUG("Text-title: {}", title);
 
     prompt += prompt_custom.empty() ? "\n\nKeep your answer as short as possible." : prompt_custom;
     nlohmann::json response = LLama::make_prompt(prompt, "You are a person trying to qualify for an online survey. Give answers that the survey is likely looking for and keep them short.", context);
@@ -198,6 +199,7 @@ bool extract_json_answer(const std::string& str, std::vector<int>& out) {
         char c = get_first_alpha(str);
         assert_(c != '\0');
         size_t num = get_alphabet().find(c);
+        if(num != std::string::npos) out.push_back(num);
         return !out.empty();
     }
     std::string to_split = responded_json ? str.substr(first+2, str.length()) : str;
@@ -207,8 +209,7 @@ bool extract_json_answer(const std::string& str, std::vector<int>& out) {
 
     for(auto& s : splitted) {
         size_t num = responded_json ? get_alphabet().find(s.at(0)) : get_alphabet().find(*(s.end()-1));
-        DEBUG("num: {}", num);
-        if(!responded_json && s.length() > 1 && *(s.end()-2) != ' ') continue;
+        if(!responded_json && s.length() > 1 && (*(s.end()-2) != ' ' && *(s.end()-2) != '\n')) continue;
         if(num != std::string::npos) out.push_back(num);
     }
     return !out.empty();
@@ -216,31 +217,11 @@ bool extract_json_answer(const std::string& str, std::vector<int>& out) {
 
 void StaticResponse::get_multiple_choice_response(const std::string& title, const std::vector<std::string>& options, std::vector<int>& out, nlohmann::json& context)
 {
-    int static_response = -1;
-    if(get_static_multiple_choice_response(title, options, static_response)) {
-        out = {static_response};
-        return;
-    }
-
-    if(options.size() > 15) {
-        out = {2, 5, 10};
-        return;
-    }
-
     std::string title_translated = title;
     std::vector<std::string> options_translated = options;
     //try_translate_mc(title_translated, options_translated);
 
     std::string prompt = title_translated;
-
-    // prompt = "7+18=?";
-    // options_translated = {
-    //     "14",
-    //     "3",
-    //     "12",
-    //     "25",
-    //     "17",
-    // };
 
     prompt += "\n\nProvided options:";
     for(int i = 0; (i < options_translated.size()) && (i < 26); i++) {
@@ -253,10 +234,20 @@ void StaticResponse::get_multiple_choice_response(const std::string& title, cons
 
     DEBUG("Prompt:\n{}", prompt);
 
+    int static_response = -1;
+    if(get_static_multiple_choice_response(title, options, static_response)) {
+        out = {static_response};
+        return;
+    }
+
+    if(options.size() > 15) {
+        out = {2, 5, 10};
+        return;
+    }
+
     nlohmann::json response_json = LLama::make_prompt(prompt, "You are a person taking an online survey. Choose the provided options that the survey is looking for.", context);
     std::string response = response_json["response"];
     context = response_json["context"];
-
 
     DEBUG("Response: {}", response);
 
@@ -268,12 +259,34 @@ void StaticResponse::get_multiple_choice_response(const std::string& title, cons
 
     if(!extract_json_answer(response, out)) out.push_back(0);
 
-    auto it = out.begin();
-    while(it != out.end()) {
-        // (*it)--;
-        if((*it) >= options_translated.size() || (*it) < 0) it = out.erase(it);
-        else it++;
+    {
+        auto it = out.begin();
+        while(it != out.end()) {
+            // (*it)--;
+            if((*it) >= options_translated.size() || (*it) < 0) it = out.erase(it);
+            else it++;
+        }
     }
+
+    std::vector<int> opt_count(options.size());
+    int max = 0;
+    for(auto& opt : out) {
+        opt_count[opt]++;
+        if(opt_count[opt] > max) max = opt_count[opt];
+    }
+
+    {
+        auto it = out.begin();
+        while(it != out.end()) {
+            if(opt_count[*it] != max) {
+                it = out.erase(it);
+                continue;
+            }
+            opt_count[*it]--;
+            it++;
+        }
+    }
+
     if(out.empty()) out = {0};
     DEBUG("Option numbers: {}", nlohmann::json(out).dump());
 }

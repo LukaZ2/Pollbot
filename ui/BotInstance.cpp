@@ -103,6 +103,8 @@ bool BotInstance::main_cycle() {
                 continue;
             }
 
+            Parser::FormCache question_cache;
+
             tablist tabs = get_tabs(client.get());
             {
                 tablist newtabs;
@@ -111,15 +113,14 @@ bool BotInstance::main_cycle() {
                 while(!element_exists(client.get(), CSS_SEL("form")) && (newtabs = get_new_tabs((tmp_tabs = get_tabs(client.get())), tabs)).empty()) {
                     sleep_ms(1000);
                     tries++;
-                    assert_em(tries < 18, "Survey start timed out.");
+                    assert_em(tries < 30, "Survey start timed out.");
+                    if(provider->on_main_page(client.get())) goto endloop;
                     continue;
                 }
                 tabs = tmp_tabs;
                 if(!newtabs.empty() && !client->switch_to_window(newtabs[0]).get().success) ERROR("Failed to switch to window {}.", newtabs[0]);
                 sleep_ms(2000);
             }
-
-            Parser::FormCache question_cache;
 
             while(true) {
 
@@ -146,7 +147,14 @@ bool BotInstance::main_cycle() {
                     }
                     assert_em(parser->get_form_tree(client.get(), tmp_tree), "get_form_tree() failed.");
                     if(tree == tmp_tree) break;
-                    sleep_ms(4000);
+                    sleep_ms(3000);
+
+                    tries++;
+                    if(tries > 20) {
+                        INFO("get_form_tree() timed out. Restarting.");
+                        goto endloop;
+                    }
+
                     if(!parser->has_interactables(tmp_tree)) continue;
                     tree = tmp_tree;
                 }

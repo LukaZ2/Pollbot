@@ -12,6 +12,7 @@ namespace Parser {
     public:
         std::vector<nlohmann::json> tree_cache;
         nlohmann::json context;
+        int unchanged = 0;
     };
 
     class FormParser {

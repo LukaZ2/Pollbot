@@ -1,43 +1,16 @@
-function node_rendered(elem) {
-    if (!(elem instanceof Element)) return true;
-    const style = getComputedStyle(elem);
-    if (style.display === 'none') return false;
-    if (style.visibility !== 'visible') return false;
-    if (style.opacity < 0.1) return false;
-    if (elem.offsetWidth + elem.offsetHeight + elem.getBoundingClientRect().height +
-        elem.getBoundingClientRect().width === 0) {
-        return false;
-    }
-    const elemCenter   = {
-        x: elem.getBoundingClientRect().left + elem.offsetWidth / 2,
-        y: elem.getBoundingClientRect().top + elem.offsetHeight / 2
-    };
-    if (elemCenter.x < 0) return false;
-    if (elemCenter.x > (document.documentElement.clientWidth || window.innerWidth)) return false;
-    if (elemCenter.y < 0) return false;
-    if (elemCenter.y > (document.documentElement.clientHeight || window.innerHeight)) return false;
-    let pointContainer = document.elementFromPoint(elemCenter.x, elemCenter.y);
-    do {
-        if (pointContainer === elem) return true;
-    } while (pointContainer = pointContainer.parentNode);
-    return false;
-}
-function node_visible(el) {
-    if(el.nodeType !== Node.ELEMENT_NODE) return el.parentNode !== null && el.parentNode !== undefined ? node_visible(el.parentNode) : true;
-    if(!el.checkVisibility()) return false;
-    var style = window.getComputedStyle(el);
-    //if(!node_rendered(el)) return false;
-    return style === null || style === undefined || (style.visibility !== "hidden");
-}
-function get_first_non_empty(node, for_id) {
-    for(var i = 0; i < node.childNodes.length; i++) {
-        let tmp = node.childNodes[i];
-        if(tmp.nodeType !== Node.ELEMENT_NODE) continue;
-        if(!node_visible(tmp)) continue;
-        if(for_id === undefined || for_id === null) return tmp;
-        if(for_id === (tmp.hasAttribute("id") ? tmp.getAttribute("id") : null)) return tmp;
-    }
-    return null;
+function node_visible(node) {
+    if(node === null) return false;
+    if(node.nodeType !== Node.ELEMENT_NODE) return node.parentNode !== null && node.parentNode !== undefined ? node_visible(node.parentNode) : true;
+    if(!node.checkVisibility({contentVisibilityAuto: true, visibilityProperty: true, opacityProperty: true})) return false;
+    var style = window.getComputedStyle(node);
+    //if(!node.checkVisibility({visibilityProperty: true})) return false;
+    if(style.display === "none") return false;
+    //if(!node.checkVisibility({opacityProperty: true})) return false;
+    var rect = node.getBoundingClientRect();
+    if((node.offsetWidth + node.offsetHeight + rect.width + rect.height) === 0) return false;
+    if(rect.left < 0) return false;
+    if(rect.top < 0) return false;
+    return true;
 }
 function nth_parent(node, n) {
     var tmp = node;
@@ -47,11 +20,20 @@ function nth_parent(node, n) {
     }
     return tmp;
 }
-function get_label(node, show_invisible) {
-    if(!node.hasAttribute("id")) {
-        if(node.parentNode.tagName === "LABEL" && get_first_non_empty(node.parentNode) === node) return node.parentNode;
-        return null;
+const label_tags = ["INPUT", "METER", "PROGRESS", "SELECT", "TEXTAREA"];
+function get_first_non_empty(node, for_id) {
+    for(var i = 0; i < node.childNodes.length; i++) {
+        let tmp = node.childNodes[i];
+        if(tmp.nodeType !== Node.ELEMENT_NODE) continue;
+        //if(!node_visible(tmp)) continue;
+        if(!label_tags.includes(tmp.tagName)) continue;
+        if(for_id === undefined || for_id === null) return tmp;
+        if(for_id === (tmp.hasAttribute("id") ? tmp.getAttribute("id") : null)) return tmp;
     }
+    return null;
+}
+function get_label(node, show_invisible) {
+    if(node.parentNode.tagName === "LABEL" && get_first_non_empty(node.parentNode) === node) return node.parentNode;
     if(show_invisible === undefined) show_invisible = false;
     var labels = document.querySelectorAll("label[for=\'" + node.getAttribute("id") + "\']");
     if(labels.length === 0) return null;
@@ -69,6 +51,12 @@ function get_text_content(node) {
         result += " ";
     }
     return result;
+}
+function nogroup(node) {
+    let class_ = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("class")) ? node.getAttribute("class").toLowerCase() : "";
+    if(class_.includes("dropdown")) return true;
+    if(node.hasAttribute("data-toggle")) return true;
+    return false;
 }
 
 var list = [];
@@ -88,7 +76,7 @@ function init_list(root, doc, frame) {
 
     var pos = 0;
     var walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL, {
-        acceptNode(node) {
+        acceptNode(node, skip_add) {
             if(node === null) return NodeFilter.FILTER_ACCEPT;
             if(node.tagName === "IFRAME" || node.tagName === "FRAME") {
                 if(node.contentDocument !== null) init_list(node.contentDocument.documentElement, node.contentDocument, node);
@@ -98,9 +86,9 @@ function init_list(root, doc, frame) {
             if(node.tagName === "OPTION") return NodeFilter.FILTER_REJECT;
             if(node.tagName === "SCRIPT") return NodeFilter.FILTER_REJECT;
             if(!node_visible(node)) {
-                if(node.nodeType !== Node.ELEMENT_NODE) return NodeFilter.FILTER_REJECT;
-                var label = get_label(node);
-                if(label === null || !node_visible(label)) return NodeFilter.FILTER_REJECT;
+                if(node.nodeType !== Node.ELEMENT_NODE) return NodeFilter.FILTER_ACCEPT;
+                var label = get_label(node, true);
+                if(label === null) return NodeFilter.FILTER_ACCEPT;
             }
 
             pos++;
@@ -110,9 +98,12 @@ function init_list(root, doc, frame) {
             var res = {};
             var skip = true;
             let class_ = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("class")) ? node.getAttribute("class").toLowerCase() : "";
+            let id = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("id")) ? node.getAttribute("id") : "";
+            let first = get_first_non_empty(node);
 
             var role = (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("role")) ? node.getAttribute("role").toLowerCase() : "";
 
+            if(class_.includes("links-wrap")) return NodeFilter.FILTER_REJECT;
             if(tag === "SELECT" || role == "listbox") {
                 res.type = "mc";
                 res.options = [];
@@ -141,11 +132,15 @@ function init_list(root, doc, frame) {
             }
 
             else if(tag === "INPUT") {
-                let type = node.getAttribute("type").toLowerCase();
-                if(type === "button" || type === "checkbox" || type === "radio") {
+                let type = node.hasAttribute("type") ? node.getAttribute("type").toLowerCase() : "";
+                if(type === "button" || type === "image") {
                     res.type = "btn";
                 }
-                else if(type === "text" || type === "textarea") {
+                else if(type === "checkbox" || type === "radio") {
+                    res.type = "btn";
+                    res.checkbox = true;
+                }
+                else if(type === "text" || type === "textarea" || !node.hasAttribute("type")) {
                     res.type = "ti";
                 }
                 else if(type === "submit") {
@@ -156,6 +151,9 @@ function init_list(root, doc, frame) {
                     res.max = parseInt(node.getAttribute("max"));
                     res.min = parseInt(node.getAttribute("min"));
                     res.step = parseInt(node.getAttribute("step"));
+                }
+                else if(type === "date") {
+                    res.type = "date";
                 }
                 else if(node.hasAttribute("list")) {
                     res.type = "mc";
@@ -171,10 +169,16 @@ function init_list(root, doc, frame) {
                 else return NodeFilter.FILTER_REJECT;
             }
 
-            else if(tag === "BUTTON" || tag === "MAT-CHECKBOX" || tag === "MAT-RADIO-BUTTON" || (node.tagName === "A" && node.hasAttribute("href"))) {
-                if(class_.includes("dropdown")) res.nogroup = true;
-                if(node.hasAttribute("data-toggle")) res.nogroup = true;
+            else if(tag === "BUTTON" || (node.tagName === "A" && node.hasAttribute("href") && !node.getAttribute("href").startsWith("/"))) {
+                if(class_.includes("language")) return NodeFilter.FILTER_ACCEPT;
+                if(nogroup(node)) res.nogroup = true;
                 res.type = "btn";
+            }
+
+            else if(tag === "MAT-CHECKBOX" || tag === "MAT-RADIO-BUTTON" || (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-ng-click"))) {
+                if(node.querySelector("input")) return NodeFilter.FILTER_ACCEPT;
+                res.type = "btn";
+                res.checkbox = true;
             }
 
             else if(tag === "LABEL") {
@@ -182,9 +186,13 @@ function init_list(root, doc, frame) {
                     var target = document.querySelector("[id=\'" + node.getAttribute("for") + "\']");
                     var first_non_empty = get_first_non_empty(node, node.getAttribute("for"));
                     if(target !== null && first_non_empty === target) return this.acceptNode(target);
-                    return NodeFilter.FILTER_REJECT;
+                    if(target !== null) return NodeFilter.FILTER_REJECT;
+                    if(first_non_empty !== null) return this.acceptNode(first_non_empty);
+                    return NodeFilter.FILTER_ACCEPT;
                 }
-                if(node.childNodes.length > 0) return this.acceptNode(get_first_non_empty(node));
+                if(node.childNodes.length > 0) {
+                    return this.acceptNode(first);
+                }
                 return NodeFilter.FILTER_ACCEPT;
             }
 
@@ -192,17 +200,45 @@ function init_list(root, doc, frame) {
                 return NodeFilter.FILTER_REJECT;
             }
 
-            else if(node.nodeType === Node.ELEMENT_NODE && tag !== "UL" && !tag.includes("GROUP") && tag !== "MAIN" && !class_.includes("button-bar") && !class_.includes("container")) {
-                if((node.onclick !== null && node.onclick !== undefined) || role === "button" || role === "radio" || role === "checkbox" || node.hasAttribute("ng-click") || class_.includes("btn") || class_.includes("button")) {
+            else if(first !== null && (first.tagName === "INPUT" || first.tagName === "BUTTON")) {
+                return NodeFilter.FILTER_ACCEPT;
+            }
 
-                    if(node.hasAttribute("class") && node.getAttribute("class").includes("dropdown")) res.nogroup = true;
-                    if(node.hasAttribute("data-toggle")) res.nogroup = true;
+            else {
+                const button_skip = [{tag:"UL"},{tag:"MAIN"},{tag_c:"GROUP"},{class_c:"button-bar"},{class_c:"container"},{class_c:"group"},{tag:"SVG"},{class_c:"buttons"},{class_c:"bb-"},{role_c:"group"},{id_c:"root"},{class_c:"-section"},{class_c:"wrapper"},{tag:"TABLE"},{class_c:"previous"},{tag:"TH"}];
+                const button_accept = [{role:"button"},{role:"radio"},{role:"checkbox"},{attr:"ng-click"},{class_c:"btn"},{class_c:"button"},{class_c:"option-item"},{class:"grid_radio"}];
+                const is_button = function (node) {
+                    if(node.nodeType !== Node.ELEMENT_NODE) return false;
+                    for(var i = 0; i < button_skip.length; i++) {
+                        let entry = button_skip[i];
+                        if(entry.tag === tag) return false;
+                        if(entry.tag_c && tag.includes(entry.tag_c)) return false;
+                        if(entry.class_c && class_.includes(entry.class_c)) return false;
+                        if(entry.role_c && role.includes(entry.role_c)) return false;
+                        if(entry.id_c && id.includes(entry.id_c)) return false;
+                    }
+
+                    if(node.onclick) return true;
+                    for(var i = 0; i < button_accept.length; i++) {
+                        let entry = button_accept[i];
+                        if(entry.role === role) return true;
+                        if(entry.attr && node.hasAttribute(entry.attr)) return true;
+                        if(entry.class === class_) return true;
+                        if(entry.class_c && class_.includes(entry.class_c)) return true;
+                    }
+
+                    return false;
+                };
+                if(is_button(node)) {
+                    if(this.acceptNode(first, true) === NodeFilter.FILTER_REJECT) return NodeFilter.FILTER_ACCEPT;
+
+                    if(nogroup(node)) res.nogroup = true;
                     res.type = "btn";
                 }
                 else return NodeFilter.FILTER_ACCEPT;
             }
 
-            else return NodeFilter.FILTER_ACCEPT;
+            if(skip_add) return skip ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
 
             if(node.nodeType === Node.ELEMENT_NODE) {
                 res.node = node;
@@ -210,6 +246,7 @@ function init_list(root, doc, frame) {
                 res.label = get_label(node, true);
                 if(res.label !== null && res.label !== undefined) res.text = res.label.textContent.replace(/\s{2,}/gm, ' ').trim();
                 else if(node.hasAttribute("aria-label")) res.text = node.getAttribute("aria-label");
+                else if(node.hasAttribute("value")) res.text = node.getAttribute("value");
                 else res.text = get_text_content(node).replace(/\s{2,}/gm, ' ').trim();
             }
 
@@ -247,7 +284,10 @@ for(var i = 0; i < list.length; i++) {
     for(;i<list.length; i++) {
         let cmp = list[i];
         if(cmp.type !== "btn" || cmp.nogroup) break;
-
+        if(cmp.node.tagName !== current.node.tagName) {
+            i--;
+            break;
+        }
         if(diff !== -1) {
             if(((cmp.pos)-(list[prev].pos)) !== diff) {
                 if(group.length === 2) i=i-2;
@@ -312,4 +352,5 @@ for(var i = 0; i < list.length; i++) {
         }
     }
 }
+for(var i = 0; i < list.length; i++) console.log(list[i]);
 return list;

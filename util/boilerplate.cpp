@@ -111,7 +111,7 @@ bool element_click_mouse_move(MarionetteClient* client, std::string id) {
     if(y >= (int)window_rect.body["height"]-100) y = ((int)window_rect.body["height"])-100;
     if(x <= 0) x = 1;
     if(y <= 0) y = 1;
-    if(!client->set_mouse_action_queue({mAction(POINTER_MOVE, (rand_multiplier()*200)+200, x, y, false)}).get().success) return false;
+    client->set_mouse_action_queue({mAction(POINTER_MOVE, (rand_multiplier()*200)+200, x, y, false)}).get();
     return client->element_click(id).get().success;
 }
 

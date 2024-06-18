@@ -142,6 +142,7 @@ char get_first_alpha(const std::string& str) {
     auto it = str.begin();
     while(it != str.end()) {
         if(isalpha(*it)) return *it;
+        it++;
     }
     return '\0';
 }
